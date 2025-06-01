@@ -1,0 +1,151 @@
+#version 450
+
+layout(local_size_x = 1024) in;
+
+struct Particle {
+    vec4 position_stress;
+    vec4 velocity_type;
+};
+
+layout(std430, binding = 0) buffer ParticleBuffer { Particle particles[]; };
+layout(std430, binding = 1) buffer GridHead { int gridHead[]; };
+layout(std430, binding = 2) buffer ParticleLinks { int particleLinks[]; };
+
+const int MAX_POSSIBLE_TYPES = 30;
+
+uniform float cellSize;
+uniform int PARTICLE_COUNT;
+uniform float deltaTime;
+uniform float seed;
+uniform float DETECTION_RADIUS;
+uniform float TOO_CLOSE_RADIUS;
+uniform int ACTIVE_TYPES;
+uniform int gridSize;
+uniform float stepSize;
+uniform int MAX_PARTICLE_INTERACTIONS;
+uniform bool useManualForceMatrix;
+uniform mat4 manualForceMatrix;
+
+float rand(int i, int j, int k, float s) {
+    return fract(sin(dot(vec4(i, j, k, s), vec4(12.9898, 78.233, 37.719, 45.164))) * 43758.5453);
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= uint(PARTICLE_COUNT)) return;
+
+    Particle self = particles[idx];
+    vec3 current_velocity = self.velocity_type.xyz;
+    float current_type = self.velocity_type.w;
+
+    float particle_stress = 0.0;
+    float stepSizeF = stepSize * 2.0;
+    float minStepScale = 1.0 / 16.0;
+    float t = clamp(deltaTime * 100.0, 0.0, 1.0);
+    float effectiveStepSize = mix(stepSizeF, stepSizeF * minStepScale, t);
+    float dt = deltaTime * effectiveStepSize;
+
+    int neighbor_cell_search_span = 0;
+    if (cellSize > 0.0001)
+        neighbor_cell_search_span = int(ceil(DETECTION_RADIUS / cellSize));
+    else if (DETECTION_RADIUS > 0.0001)
+        neighbor_cell_search_span = 1;
+
+    ivec3 cell = ivec3(floor((self.position_stress.xyz + 1.0) / cellSize));
+
+    vec3 in_range_force_accumulator[MAX_POSSIBLE_TYPES];
+    vec3 too_close_force_accumulator[MAX_POSSIBLE_TYPES];
+    float particles_in_area[MAX_POSSIBLE_TYPES];
+    float particles_in_too_close[MAX_POSSIBLE_TYPES];
+
+    for (int i = 0; i < ACTIVE_TYPES; ++i) {
+        in_range_force_accumulator[i] = vec3(0.0);
+        too_close_force_accumulator[i] = vec3(0.0);
+        particles_in_area[i] = 0.0;
+        particles_in_too_close[i] = 0.0;
+    }
+
+    vec3 velocityAdjustment = vec3(0.0);
+    float particlesInteractions = 0.0;
+
+    for (int dz = -neighbor_cell_search_span; dz <= neighbor_cell_search_span; ++dz)
+    for (int dy = -neighbor_cell_search_span; dy <= neighbor_cell_search_span; ++dy)
+    for (int dx = -neighbor_cell_search_span; dx <= neighbor_cell_search_span; ++dx) {
+        ivec3 neighborCell = (cell + ivec3(dx, dy, dz) + gridSize) % gridSize;
+        int headCellIdx = neighborCell.z * gridSize * gridSize + neighborCell.y * gridSize + neighborCell.x;
+        int head = gridHead[headCellIdx];
+
+        while (head != -1) {
+            if (head != int(idx)) {
+                Particle other = particles[head];
+                int otherType = int(round(other.velocity_type.w));
+                if (otherType >= 0 && otherType < ACTIVE_TYPES) {
+                    vec3 relativeDistance = other.position_stress.xyz - self.position_stress.xyz;
+                    float dist = length(relativeDistance);
+                    vec3 dir = normalize(relativeDistance);
+                    float forceMag = 1.0 / (dist * dist);
+
+                    if (dist > TOO_CLOSE_RADIUS && dist < DETECTION_RADIUS) {
+                        particlesInteractions += 1.0;
+                        in_range_force_accumulator[otherType] += dir * forceMag;
+                        particles_in_area[otherType] += 1.0;
+                    } else if (dist < TOO_CLOSE_RADIUS) {
+                        particlesInteractions += 1.0;
+                        float strongRepel = 1.0 / (dist * dist * dist + 0.00001);
+                        too_close_force_accumulator[otherType] -= dir * strongRepel;
+                        particles_in_too_close[otherType] += 1.0;
+                    }
+                    if (particlesInteractions > MAX_PARTICLE_INTERACTIONS)
+                        break;
+                }
+            }
+            head = particleLinks[head];
+        }
+    }
+
+    float forceValues[MAX_POSSIBLE_TYPES * MAX_POSSIBLE_TYPES];
+    float force_scaling = float(gridSize * gridSize * gridSize);
+    int effectiveTypes = useManualForceMatrix ? 4 : ACTIVE_TYPES;
+
+    for (int col = 0; col < effectiveTypes; ++col)
+    for (int row = 0; row < effectiveTypes; ++row) {
+        if (useManualForceMatrix)
+            forceValues[col * effectiveTypes + row] = manualForceMatrix[col][row];
+        else
+            forceValues[col * effectiveTypes + row] = rand(col, row, 0, seed) * force_scaling - (force_scaling / 2.0);
+    }
+
+    int selfType = int(round(current_type));
+    if (selfType >= 0 && selfType < effectiveTypes) {
+        for (int actingType = 0; actingType < effectiveTypes; ++actingType) {
+            if (particles_in_area[actingType] > 0.0 || particles_in_too_close[actingType] > 0.0) {
+                float interaction = forceValues[actingType * effectiveTypes + selfType];
+                velocityAdjustment += interaction * in_range_force_accumulator[actingType];
+                velocityAdjustment += too_close_force_accumulator[actingType];
+            }
+        }
+    }
+
+    if (length(velocityAdjustment) > 25.0)
+        velocityAdjustment = normalize(velocityAdjustment) * 25.0;
+    if (any(isnan(velocityAdjustment)) || any(isinf(velocityAdjustment)))
+        velocityAdjustment = vec3(0.0);
+
+    float baseDamping = 0.92;
+    float damping = clamp(pow(baseDamping, stepSize), 0.7, 0.999);
+    vec3 new_velocity = current_velocity * damping  + velocityAdjustment * dt;
+
+    particle_stress += length(velocityAdjustment * 0.001);
+
+    vec3 new_position = self.position_stress.xyz + new_velocity * dt;
+
+    if (any(greaterThanEqual(abs(new_position), vec3(gridSize) / 2.0))) {
+        new_position = mod(new_position + vec3(gridSize) / 2.0, vec3(gridSize)) - vec3(gridSize) / 2.0;
+        new_position *= 0.95;
+        new_velocity *= 0.95;
+    }
+
+    particles[idx].position_stress.xyz = new_position;
+    particles[idx].position_stress.w = particle_stress * 25.0 * (particlesInteractions / float(MAX_PARTICLE_INTERACTIONS));
+    particles[idx].velocity_type = vec4(new_velocity, current_type);
+}

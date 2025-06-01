@@ -1,0 +1,24 @@
+{
+    "hdr": {
+      "type": "HDR",
+      "width": 1200,
+      "height": 900,
+      "samples": 2
+    },
+    "bloom": {
+      "type": "Bloom",
+      "width": 1200,
+      "height": 900
+    },
+    "downsample": {
+      "type": "DownSample",
+      "width": 1200,
+      "height": 900
+    },
+    "depth": {
+      "type": "Depth",
+      "width": 1200,
+      "height": 900
+    }
+  }
+  

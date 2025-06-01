@@ -1,0 +1,29 @@
+#version 450
+
+layout(local_size_x = 512) in;
+
+struct Particle {
+    vec4 position_stress;
+    vec4 velocity_type;
+};
+
+layout(std430, binding = 0) buffer ParticleBuffer { Particle particles[]; };
+layout(std430, binding = 1) buffer GridHead { int gridHead[]; };
+layout(std430, binding = 2) buffer ParticleLinks { int particleLinks[]; };
+
+uniform float cellSize;
+uniform int PARTICLE_COUNT;
+uniform int gridSize;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= uint(PARTICLE_COUNT)) return;
+
+    vec3 pos = particles[idx].position_stress.xyz;
+    vec3 gridPos = (pos + 1.0) / cellSize;
+    ivec3 cell = ivec3(floor(gridPos));
+    cell = (cell + gridSize) % gridSize;
+    int cellIdx = (cell.z * gridSize * gridSize) + (cell.y * gridSize) + cell.x;
+
+    particleLinks[idx] = atomicExchange(gridHead[cellIdx], int(idx));
+}

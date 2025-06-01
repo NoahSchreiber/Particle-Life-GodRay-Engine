@@ -1,0 +1,15 @@
+#version 460 core
+
+in vec2 TexCoords;
+out vec4 FragColor;
+
+uniform sampler2D popeTexture; 
+uniform sampler2D downsampledTexture; 
+
+
+
+void main() {
+    vec3 pope = texture(popeTexture, TexCoords).rgb;
+    vec3 world = texture(downsampledTexture, TexCoords).rgb;
+    FragColor = vec4(world, 1.0);
+}

@@ -1,0 +1,4 @@
+Created: 29.05.2025
+Goal: Simulate and play with particles
+
+Version: V2025_05_29_dev

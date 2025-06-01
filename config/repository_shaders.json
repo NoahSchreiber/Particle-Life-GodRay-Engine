@@ -1,0 +1,34 @@
+{
+
+
+    "downsample": {
+      "vertex": "shaders/downSampleShader.vertex",
+      "fragment": "shaders/downSampleShader.fragment",
+      "uniforms": {
+        "MSAA_Factor": ["int", 2, "input"]
+      }
+    },
+    "display": {
+      "vertex": "shaders/hdrShader.vertex",
+      "fragment": "shaders/hdrShader.fragment"
+    },
+    "raymarch_particles": {
+      "vertex": "shaders/raymarch_particles.vs",
+      "fragment": "shaders/raymarch_particles.fs"
+    },
+    "particles_cs": {
+      "compute": "shaders/particles.comp"
+    },
+    "particles_partition_cs": {
+      "compute": "shaders/particles_partition.comp"
+    },
+      "draw_particles": {
+      "vertex": "shaders/draw_particles.vs",
+      "fragment": "shaders/draw_particles.fs"
+    },
+      "draw_grid": {
+      "vertex": "shaders/draw_grid.vs",
+      "fragment": "shaders/draw_grid.fs"
+    }
+  }
+  

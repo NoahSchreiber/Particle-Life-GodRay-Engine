@@ -1,0 +1,24 @@
+#version 330 core
+
+in vec2 TexCoords;
+out vec4 FragColor;
+
+uniform sampler2DMS hdrTexture;
+
+uniform int MSAA_Factor;
+
+
+void main() {       
+
+    vec3 hdrColor = vec3(0.0);
+    
+    for (int i = 0; i < MSAA_Factor; ++i) {
+        hdrColor += texelFetch(hdrTexture, ivec2(gl_FragCoord.xy), i).rgb;
+    }
+    
+    hdrColor /= float(MSAA_Factor); 
+    
+    FragColor = vec4(hdrColor, 1.0);
+    
+}
+
