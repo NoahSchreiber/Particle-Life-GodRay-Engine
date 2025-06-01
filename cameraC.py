@@ -69,6 +69,7 @@ class Camera:
 
         self.update_view()
 
+
     def process_mouse_movement(self, xpos, ypos):
         if not self.mouse_captured:
             return
@@ -100,13 +101,16 @@ class Camera:
 
         self.update_view()
     
+    
     def process_scroll(self, yoffset):
         self.speed += self.speed * 0.1 * yoffset
         self.speed = max(self.speed, 0.1)
 
+
     def scroll_callback(self, window, xoffset, yoffset):
         if self.mouse_captured:
             self.process_scroll(yoffset)
+        
         
     def reset(self):
         self.cameraPos = glm.vec3(1.0, 2.0, 1.0)

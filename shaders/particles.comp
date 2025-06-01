@@ -39,11 +39,7 @@ void main() {
     float current_type = self.velocity_type.w;
 
     float particle_stress = 0.0;
-    float stepSizeF = stepSize * 2.0;
-    float minStepScale = 1.0 / 16.0;
-    float t = clamp(deltaTime * 100.0, 0.0, 1.0);
-    float effectiveStepSize = mix(stepSizeF, stepSizeF * minStepScale, t);
-    float dt = deltaTime * effectiveStepSize;
+    float dt = deltaTime * stepSize;
 
     int neighbor_cell_search_span = 0;
     if (cellSize > 0.0001)
@@ -131,8 +127,8 @@ void main() {
     if (any(isnan(velocityAdjustment)) || any(isinf(velocityAdjustment)))
         velocityAdjustment = vec3(0.0);
 
-    float baseDamping = 0.92;
-    float damping = clamp(pow(baseDamping, stepSize), 0.7, 0.999);
+    float baseDamping = 0.93;
+    float damping = clamp(pow(baseDamping, stepSize), 0.6, 0.99);
     vec3 new_velocity = current_velocity * damping  + velocityAdjustment * dt;
 
     particle_stress += length(velocityAdjustment * 0.001);
